@@ -75,7 +75,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	connection.ReadConnectionMessage(s.MsgChan)
 }
 
-func readMessages(msgChan chan Message) {
+func readChannelMessages(msgChan chan Message) {
 	for message := range msgChan {
 		log.Println(message)
 	}
@@ -83,7 +83,7 @@ func readMessages(msgChan chan Message) {
 
 func main() {
 	msgChan := make(chan Message)
-	go readMessages(msgChan)
+	go readChannelMessages(msgChan)
 	server := Server{MsgChan: msgChan}
 	http.HandleFunc("/ws", server.handler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
