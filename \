@@ -1,0 +1,13 @@
+function ColorMyPencils(color)
+	color = color or "rose-pine"
+	require("onedark").setup {
+		style = "darker",
+		transparent = true
+	}
+	vim.cmd.colorscheme(color)
+  -- Set the background to transparent for multiple highlight groups
+	vim.api.nvim_set_hl(0, "Normal", { bg = "#000000" })
+	vim.api.nvim_set_hl(0, "NormalFloat", { bg = "#000000" })
+end
+
+ColorMyPencils()
