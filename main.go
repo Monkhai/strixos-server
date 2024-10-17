@@ -13,7 +13,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-// var connections = []WebSocketConnection{}
+var connections = []WebSocketConnection{}
 
 type Message struct {
 	Type string `json:"type"`
@@ -24,11 +24,16 @@ type WebSocketConnection struct {
 	Conn *websocket.Conn
 }
 
-func (w WebSocketConnection) ReadConnectionMessage(msgChan chan Message) {
+func (w WebSocketConnection) ReadMessages(msgChan chan Message, closeChan chan struct{}) {
 	defer w.Conn.Close()
 	for {
 		_, msgBtyes, err := w.Conn.ReadMessage()
 		if err != nil {
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				log.Println("User closed the connetion with code 1000 (normal)")
+			} else if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
+				log.Println("User closed the connection with code 1006 (they just left bro)")
+			}
 			break
 		}
 		var msg Message
@@ -41,7 +46,9 @@ func (w WebSocketConnection) ReadConnectionMessage(msgChan chan Message) {
 }
 
 type Server struct {
-	MsgChan chan Message
+	MsgChan   chan Message
+	CloseChan chan struct{}
+	Players   []WebSocketConnection
 }
 
 func (s *Server) handleUnauthorized(w http.ResponseWriter) {
@@ -69,23 +76,39 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Upgrade error:", err)
 		return
 	}
-	defer conn.Close()
-
 	connection := WebSocketConnection{Conn: conn}
-	connection.ReadConnectionMessage(s.MsgChan)
+	s.Players = append(s.Players, connection)
+	go connection.ReadMessages(s.MsgChan, s.CloseChan)
 }
 
-func readChannelMessages(msgChan chan Message) {
-	for message := range msgChan {
-		log.Println(message)
+func (s *Server) ReadChannels() {
+	for {
+		select {
+		case message := <-s.MsgChan:
+			log.Println("message:", message)
+
+		case <-s.CloseChan:
+			log.Println("received closing signal")
+			close(s.MsgChan)
+			return
+		}
 	}
 }
 
 func main() {
 	msgChan := make(chan Message)
-	go readChannelMessages(msgChan)
-	server := Server{MsgChan: msgChan}
-	http.HandleFunc("/ws", server.handler)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	closeChan := make(chan struct{})
+	defer close(closeChan)
 
+	server := Server{MsgChan: msgChan, CloseChan: closeChan}
+	go server.ReadChannels()
+	http.HandleFunc("/ws", server.handler)
+	go func() {
+		log.Fatal(http.ListenAndServe(":8080", nil))
+	}()
+
+	<-closeChan
+
+	close(msgChan)
+	log.Println("Server shutting down, closed message channel")
 }
