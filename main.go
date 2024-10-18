@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -24,8 +29,9 @@ type WebSocketConnection struct {
 	Conn *websocket.Conn
 }
 
-func (w WebSocketConnection) ReadMessages(msgChan chan Message, closeChan chan struct{}) {
+func (w WebSocketConnection) ReadMessages(msgChan chan Message, closeChan chan struct{}, wg *sync.WaitGroup) {
 	defer w.Conn.Close()
+	defer wg.Done()
 	for {
 		_, msgBtyes, err := w.Conn.ReadMessage()
 		if err != nil {
@@ -39,9 +45,11 @@ func (w WebSocketConnection) ReadMessages(msgChan chan Message, closeChan chan s
 		var msg Message
 		err = json.Unmarshal(msgBtyes, &msg)
 		if err != nil {
-			break
+			newMessage, _ := json.Marshal(map[string]string{"error": "bad message"})
+			w.Conn.WriteMessage(1, newMessage)
+		} else {
+			msgChan <- msg
 		}
-		msgChan <- msg
 	}
 }
 
@@ -49,6 +57,7 @@ type Server struct {
 	MsgChan   chan Message
 	CloseChan chan struct{}
 	Players   []WebSocketConnection
+	Wg        *sync.WaitGroup
 }
 
 func (s *Server) handleUnauthorized(w http.ResponseWriter) {
@@ -78,7 +87,9 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	}
 	connection := WebSocketConnection{Conn: conn}
 	s.Players = append(s.Players, connection)
-	go connection.ReadMessages(s.MsgChan, s.CloseChan)
+
+	s.Wg.Add(1)
+	go connection.ReadMessages(s.MsgChan, s.CloseChan, s.Wg)
 }
 
 func (s *Server) ReadChannels() {
@@ -89,7 +100,6 @@ func (s *Server) ReadChannels() {
 
 		case <-s.CloseChan:
 			log.Println("received closing signal")
-			close(s.MsgChan)
 			return
 		}
 	}
@@ -98,17 +108,45 @@ func (s *Server) ReadChannels() {
 func main() {
 	msgChan := make(chan Message)
 	closeChan := make(chan struct{})
-	defer close(closeChan)
+	wg := &sync.WaitGroup{}
 
-	server := Server{MsgChan: msgChan, CloseChan: closeChan}
+	server := Server{MsgChan: msgChan, CloseChan: closeChan, Wg: wg, Players: []WebSocketConnection{}}
 	go server.ReadChannels()
-	http.HandleFunc("/ws", server.handler)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", server.handler)
+
+	httpServer := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+
 	go func() {
-		log.Fatal(http.ListenAndServe(":8080", nil))
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("ListenAndServe(): %v", err)
+		}
 	}()
 
-	<-closeChan
+	<-stop
+	log.Println("Shutting down server")
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := httpServer.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shut down: %v", err)
+	}
+
+	close(closeChan)
+	for _, conn := range server.Players {
+		log.Println("Forcefully closing WebSocket connection")
+		conn.Conn.Close()
+	}
+	wg.Wait()
 	close(msgChan)
-	log.Println("Server shutting down, closed message channel")
+
+	log.Println("Server stopped nicely")
 }
