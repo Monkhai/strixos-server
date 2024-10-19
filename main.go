@@ -53,6 +53,16 @@ func (w WebSocketConnection) ReadMessages(msgChan chan Message, closeChan chan s
 	}
 }
 
+func (w WebSocketConnection) SendMessage(msg Message) error {
+	marshaled, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	w.Conn.WriteMessage(1, marshaled)
+
+	return nil
+}
+
 type Server struct {
 	MsgChan   chan Message
 	CloseChan chan struct{}
@@ -70,7 +80,6 @@ func (s *Server) handleUnauthorized(w http.ResponseWriter) {
 		log.Fatalf("Error happened in JSON marshal. Err: %s", err)
 	}
 	w.Write(jsonResp)
-
 }
 
 func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +94,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Upgrade error:", err)
 		return
 	}
+
 	connection := WebSocketConnection{Conn: conn}
 	s.Players = append(s.Players, connection)
 
