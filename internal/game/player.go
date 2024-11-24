@@ -9,12 +9,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Monkhai/strixos-server.git/internal/identity"
 	"github.com/Monkhai/strixos-server.git/pkg/shared"
 	"github.com/gorilla/websocket"
 )
 
 type Player struct {
-	ID                string
 	Conn              *websocket.Conn
 	GameMessageChan   chan interface{}
 	ServerMessageChan chan interface{}
@@ -22,12 +22,12 @@ type Player struct {
 	Cancel            context.CancelFunc
 	IsInGame          bool
 	Mux               *sync.RWMutex
+	Identity          *identity.Identity
 }
 
-func NewPlayer(id string, conn *websocket.Conn, ctx context.Context) *Player {
+func NewPlayer(identity *identity.Identity, conn *websocket.Conn, ctx context.Context) *Player {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Player{
-		ID:                id,
 		Conn:              conn,
 		GameMessageChan:   make(chan interface{}, 10),
 		ServerMessageChan: make(chan interface{}, 10),
@@ -35,15 +35,16 @@ func NewPlayer(id string, conn *websocket.Conn, ctx context.Context) *Player {
 		Cancel:            cancel,
 		IsInGame:          false,
 		Mux:               &sync.RWMutex{},
+		Identity:          identity,
 	}
 }
 
-func (p *Player) Listen(wg *sync.WaitGroup) {
+func (p *Player) Listen(wg *sync.WaitGroup, validateIdentity func(*identity.Identity) (bool, error)) {
 	defer func() {
 		wg.Done()
 		close(p.GameMessageChan)
 		close(p.ServerMessageChan)
-		log.Printf("Player %s listener done\n", p.ID)
+		log.Printf("Player %s listener done\n", p.Identity.ID)
 	}()
 
 	messageChan := make(chan []byte)
@@ -64,26 +65,38 @@ func (p *Player) Listen(wg *sync.WaitGroup) {
 		select {
 		case <-p.Ctx.Done():
 			{
-				log.Printf("Player %s context done\n", p.ID)
+				log.Printf("Player %s context done\n", p.Identity.ID)
 				p.WriteMessage(shared.DisconnectedFromServerMessage)
 				return
 			}
 		case msg := <-messageChan:
 			{
-
-				var baseMsg shared.BaseMessage
+				var baseMsg shared.BaseClientMessage
 				if err := json.Unmarshal(msg, &baseMsg); err != nil {
-					log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+					log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
 					continue
 				}
-				log.Println(p.ID, baseMsg.Type)
+				log.Println(p.Identity.ID, baseMsg.Type)
+
+				//--------------------------------
+				// Validate the identity
+				valid, err := validateIdentity(&baseMsg.Identity)
+				if err != nil {
+					log.Printf("Error validating identity: %v\n", err)
+					continue
+				}
+				if !valid {
+					log.Printf("Invalid identity: %v\n", baseMsg.Identity)
+					continue
+				}
+				//--------------------------------
 
 				switch baseMsg.Type {
 				case shared.MoveMessageType:
 					{
 						var moveMsg shared.MoveMessage
 						if err := json.Unmarshal(msg, &moveMsg); err != nil {
-							log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
 							continue
 						}
 						p.GameMessageChan <- moveMsg
@@ -93,27 +106,27 @@ func (p *Player) Listen(wg *sync.WaitGroup) {
 					{
 						var closeMsg shared.CloseMessage
 						if err := json.Unmarshal(msg, &closeMsg); err != nil {
-							log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
 							continue
 						}
 						closeGameMessage := shared.CloseMessage{
-							BaseMessage: shared.BaseMessage{Type: "gameClosed"},
-							Reason:      closeMsg.Reason,
+							BaseClientMessage: shared.BaseClientMessage{Type: "gameClosed", Identity: baseMsg.Identity},
+							Reason:            closeMsg.Reason,
 						}
 						p.GameMessageChan <- closeGameMessage
 					}
 
 				case shared.RequestGameMessageType:
 					{
-						log.Printf("Player %s requested a game\n", p.ID)
-						p.ServerMessageChan <- shared.RequestGameMessage
+						log.Printf("Player %s requested a game\n", p.Identity.ID)
+						p.ServerMessageChan <- shared.RequestGameMessage(baseMsg.Identity)
 					}
 
 				case shared.LeaveGameMessageType:
 					{
 						var leaveGameMessage shared.BaseMessage
 						if err := json.Unmarshal(msg, &leaveGameMessage); err != nil {
-							log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
 							continue
 						}
 						p.GameMessageChan <- leaveGameMessage
@@ -122,7 +135,7 @@ func (p *Player) Listen(wg *sync.WaitGroup) {
 				case shared.LeaveQueueMessageType:
 					var leaveQueueMessage shared.BaseMessage
 					if err := json.Unmarshal(msg, &leaveQueueMessage); err != nil {
-						log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+						log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
 						continue
 					}
 					{
@@ -138,22 +151,35 @@ func (p *Player) Listen(wg *sync.WaitGroup) {
 		case err := <-errorChan:
 			{
 				if err != nil {
-					if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-						log.Printf("Player %s disconnected gracefully\n", p.ID)
+					if websocket.IsCloseError(
+						err,
+						websocket.CloseNormalClosure,
+						websocket.CloseGoingAway,
+						websocket.CloseAbnormalClosure,
+						websocket.CloseNoStatusReceived) {
+						log.Printf("Player %s disconnected gracefully\n", p.Identity.ID)
 					} else {
-						log.Printf("Unexpected error reading from player %s: %v\n", p.ID, err)
+						log.Printf("Unexpected error reading from player %s: %v\n", p.Identity.ID, err)
 					}
 
 					if p.IsInGame {
 						p.GameMessageChan <- DisconnectedMessage{Player: p}
 					} else {
+						log.Println("Player not in game, sending error message")
 						p.ServerMessageChan <- DisconnectedMessage{Player: p}
 					}
-					return
 				}
+				p.Cancel()
+				return
 			}
 		}
 	}
+}
+
+func (p *Player) UpdateIdentity(i identity.Identity) {
+	p.Mux.Lock()
+	defer p.Mux.Unlock()
+	p.Identity = &i
 }
 
 func (p *Player) WriteMessage(message interface{}) error {

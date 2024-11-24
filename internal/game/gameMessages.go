@@ -1,34 +1,36 @@
 package game
 
-import "github.com/Monkhai/strixos-server.git/pkg/shared"
+import (
+	"github.com/Monkhai/strixos-server.git/pkg/shared"
+)
 
-func (g *Game) NewGameMessage(mark, activePlayer, playerId string) shared.GenericMessage {
+func (g *Game) NewGameMessage(mark string, activePlayer, opponent *Player) shared.GenericMessage {
 	return shared.GenericMessage{
 		Type: shared.StartGameMessageType,
 		Content: map[string]any{
 			"board":        g.Board.Cells,
 			"mark":         mark,
-			"activePlayer": activePlayer,
-			"yourId":       playerId,
+			"activePlayer": activePlayer.Identity.GetSafeIdentity(),
+			"opponent":     opponent.Identity.GetSafeIdentity(),
 		},
 	}
 }
 
-func (g *Game) GameUpdateMessage(activePlayer string) shared.GenericMessage {
+func (g *Game) GameUpdateMessage(activePlayer *Player) shared.GenericMessage {
 	return shared.GenericMessage{
 		Type: shared.UpdateGameMessageType,
 		Content: map[string]any{
 			"board":        g.Board.Cells,
-			"activePlayer": activePlayer,
+			"activePlayer": activePlayer.Identity.GetSafeIdentity(),
 		},
 	}
 }
-func GameOverMessage(board *Board, winner string) *shared.GenericMessage {
+func GameOverMessage(board *Board, winner *Player) *shared.GenericMessage {
 	return &shared.GenericMessage{
 		Type: shared.GameOverMessageType,
 		Content: map[string]any{
 			"board":  board.Cells,
-			"winner": winner,
+			"winner": winner.Identity.GetSafeIdentity(),
 		},
 	}
 }

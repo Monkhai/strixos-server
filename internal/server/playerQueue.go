@@ -35,7 +35,7 @@ func (q *PlayerQueue) Enqueue(p *game.Player) {
 		q.Tail = node
 	}
 
-	q.Map[p.ID] = node
+	q.Map[p.Identity.ID] = node
 }
 
 func (q *PlayerQueue) Dequeue() *game.Player {
@@ -55,7 +55,7 @@ func (q *PlayerQueue) Dequeue() *game.Player {
 		q.Head.Prev = nil
 	}
 
-	delete(q.Map, node.Player.ID)
+	delete(q.Map, node.Player.Identity.ID)
 	return node.Player
 }
 
@@ -63,7 +63,7 @@ func (q *PlayerQueue) RemovePlayer(p *game.Player) {
 	q.Mux.Lock()
 	defer q.Mux.Unlock()
 
-	node, exists := q.Map[p.ID]
+	node, exists := q.Map[p.Identity.ID]
 	if !exists {
 		return
 	}
@@ -80,7 +80,7 @@ func (q *PlayerQueue) RemovePlayer(p *game.Player) {
 		q.Tail = node.Prev
 	}
 
-	delete(q.Map, p.ID)
+	delete(q.Map, p.Identity.ID)
 }
 
 func (q *PlayerQueue) GetTwoPlayers() ([2]*game.Player, bool) {
@@ -120,6 +120,6 @@ func (q *PlayerQueue) printQueue() {
 	defer q.Mux.RUnlock()
 
 	for node := q.Head; node != nil; node = node.Next {
-		log.Println(node.Player.ID)
+		log.Println(node.Player.Identity.ID)
 	}
 }

@@ -43,19 +43,19 @@ func (g *Game) GameLoop(wg *sync.WaitGroup) {
 	currentPlayer := g.Player1
 	otherPlayer := g.Player2
 
-	log.Printf("\nGame started between %s and %s\n\n", g.Player1.ID, g.Player2.ID)
+	log.Printf("\nGame started between %s and %s\n\n", g.Player1.Identity.ID, g.Player2.Identity.ID)
 
 	// start game for the Players and tell them who they are and who is the next player
-	currentPlayerStartGameMsg := g.NewGameMessage("x", currentPlayer.ID, currentPlayer.ID)
+	currentPlayerStartGameMsg := g.NewGameMessage("x", currentPlayer, otherPlayer)
 	currentPlayer.WriteMessage(currentPlayerStartGameMsg)
-	otherPlayerStartGameMsg := g.NewGameMessage("o", currentPlayer.ID, otherPlayer.ID)
+	otherPlayerStartGameMsg := g.NewGameMessage("o", currentPlayer, currentPlayer)
 	otherPlayer.WriteMessage(otherPlayerStartGameMsg)
 
 	for {
 		select {
 		case <-g.Ctx.Done():
 			{
-				log.Printf("Game between %s and %s ended\n", g.Player1.ID, g.Player2.ID)
+				log.Printf("Game between %s and %s ended\n", g.Player1.Identity.ID, g.Player2.Identity.ID)
 				return
 			}
 
@@ -63,7 +63,7 @@ func (g *Game) GameLoop(wg *sync.WaitGroup) {
 			switch m := msg.(type) {
 			case DisconnectedMessage:
 				{
-					log.Printf("Player %s disconnected. Ending game.\n", currentPlayer.ID)
+					log.Printf("Player %s disconnected. Ending game.\n", currentPlayer.Identity.ID)
 					otherPlayer.Conn.WriteJSON(m)
 					g.MsgChan <- DisconnectedMessage{Player: currentPlayer}
 					return
@@ -86,14 +86,14 @@ func (g *Game) GameLoop(wg *sync.WaitGroup) {
 
 					g.Board.UpdateLives()
 					if g.Board.CheckWin() {
-						currentPlayer.WriteMessage(*GameOverMessage(g.Board, currentPlayer.ID))
-						otherPlayer.WriteMessage(*GameOverMessage(g.Board, currentPlayer.ID))
-						log.Printf("Game over. Player %s won.\n", currentPlayer.ID)
+						currentPlayer.WriteMessage(*GameOverMessage(g.Board, currentPlayer))
+						otherPlayer.WriteMessage(*GameOverMessage(g.Board, currentPlayer))
+						log.Printf("Game over. Player %s won.\n", currentPlayer.Identity.ID)
 						return
 					}
 
 					currentPlayer, otherPlayer = otherPlayer, currentPlayer
-					updateMsg := g.GameUpdateMessage(currentPlayer.ID)
+					updateMsg := g.GameUpdateMessage(currentPlayer)
 					currentPlayer.WriteMessage(updateMsg)
 					otherPlayer.WriteMessage(updateMsg)
 					break
@@ -104,7 +104,7 @@ func (g *Game) GameLoop(wg *sync.WaitGroup) {
 					switch m.Type {
 					case shared.LeaveGameMessageType:
 						{
-							log.Printf("Player %s left the game. Ending game.\n", currentPlayer.ID)
+							log.Printf("Player %s left the game. Ending game.\n", currentPlayer.Identity.ID)
 							g.MsgChan <- LeaveGameMessage{RequestingPlayer: currentPlayer, OtherPlayer: otherPlayer}
 							return
 						}
@@ -130,21 +130,21 @@ func (g *Game) GameLoop(wg *sync.WaitGroup) {
 			switch m := msg.(type) {
 			case shared.CloseMessage:
 				{
-					fmt.Printf("Player %s disconnected. Ending game.\n", currentPlayer.ID)
+					fmt.Printf("Player %s disconnected. Ending game.\n", currentPlayer.Identity.ID)
 					otherPlayer.Conn.WriteJSON(m)
 					g.MsgChan <- DisconnectedMessage{Player: otherPlayer}
 					return
 				}
 			case shared.MoveMessage:
 				{
-					fmt.Printf("Ignoring message from %s (not their turn): %v\n", otherPlayer.ID, m.Content)
+					fmt.Printf("Ignoring message from %s (not their turn): %v\n", otherPlayer.Identity.ID, m.Content)
 				}
 			case shared.BaseMessage:
 				{
 					switch m.Type {
 					case shared.LeaveGameMessageType:
 						{
-							log.Printf("Player %s left the game. Ending game.\n", otherPlayer.ID)
+							log.Printf("Player %s left the game. Ending game.\n", otherPlayer.Identity.ID)
 							g.MsgChan <- LeaveGameMessage{RequestingPlayer: otherPlayer, OtherPlayer: currentPlayer}
 							return
 						}

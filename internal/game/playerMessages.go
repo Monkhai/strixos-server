@@ -1,6 +1,9 @@
 package game
 
-import "github.com/Monkhai/strixos-server.git/pkg/shared"
+import (
+	"github.com/Monkhai/strixos-server.git/internal/identity"
+	"github.com/Monkhai/strixos-server.git/pkg/shared"
+)
 
 const (
 	PlayerDisconnected shared.MessageType = "playerDisconnected"
@@ -17,6 +20,13 @@ type LeaveGameMessage struct {
 
 type LeaveQueueMessage struct {
 	Player *Player
+}
+
+type UpdateIdentityMessage struct {
+	Type    shared.MessageType `json:"type"`
+	Content struct {
+		Identity identity.Identity `json:"identity"`
+	} `json:"content"`
 }
 
 var PlayerDisconnectedMessage = shared.GenericMessage{

@@ -1,5 +1,7 @@
 package shared
 
+import "github.com/Monkhai/strixos-server.git/internal/identity"
+
 const (
 	MoveMessageType        MessageType = "move"
 	CloseMessageType       MessageType = "close"          // why do we have this>???
@@ -7,11 +9,17 @@ const (
 	LeaveGameMessageType   MessageType = "leaveGame"      // base message type
 	LeaveQueueMessageType  MessageType = "leaveQueue"     // base message type
 	UnknownMessageType     MessageType = "unknownMessage" // unknown
+	UpdateIdentityType     MessageType = "updateIdentity" // unknown
 )
 
+type BaseClientMessage struct {
+	Type     MessageType       `json:"type"`
+	Identity identity.Identity `json:"identity"`
+}
+
 type MoveMessage struct {
-	BaseMessage //expected to be "move"
-	Content     struct {
+	BaseClientMessage
+	Content struct {
 		Row  int    `json:"row"`
 		Col  int    `json:"col"`
 		Mark string `json:"mark"`
@@ -19,10 +27,14 @@ type MoveMessage struct {
 }
 
 type CloseMessage struct {
-	BaseMessage        //exptected to be "close"
-	Reason      string `json:"reason"`
+	BaseClientMessage
+	Identity identity.Identity `json:"identity"`
+	Reason   string            `json:"reason"`
 }
 
-var RequestGameMessage = BaseMessage{
-	Type: RequestGameMessageType,
+func RequestGameMessage(identity identity.Identity) BaseClientMessage {
+	return BaseClientMessage{
+		Type:     RequestGameMessageType,
+		Identity: identity,
+	}
 }

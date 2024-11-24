@@ -12,8 +12,10 @@ const (
 	RemovedFromQueueMessageType       MessageType = "removedFromQueue"
 	RemovedFromGameMessageType        MessageType = "removedFromGame"
 	OpponentDisconnectedMessageType   MessageType = "opponentDisconnected"
-	RegisteredMessageType             MessageType = "registered"
 	DisconnectedFromServerMessageType MessageType = "disconnectedFromServer"
+	//register flow
+	InitialIdentityMessageType MessageType = "initialIdentity"
+	RegisteredMessageType      MessageType = "registered"
 )
 
 var DisconnectedFromServerMessage = GenericMessage{
@@ -28,7 +30,16 @@ var RemovedFromQueueMessage = GenericMessage{
 	Type: RemovedFromQueueMessageType,
 }
 
-func RegistedMesage(identity identity.Identity) GenericMessage {
+func InitialIdentityMessage(identity identity.InitialIdentity) GenericMessage {
+	return GenericMessage{
+		Type: InitialIdentityMessageType,
+		Content: map[string]any{
+			"identity": identity,
+		},
+	}
+}
+
+func RegistedMesage(identity *identity.Identity) GenericMessage {
 	return GenericMessage{
 		Type: RegisteredMessageType,
 		Content: map[string]any{

@@ -5,11 +5,6 @@ import (
 	"encoding/hex"
 )
 
-type Identity struct {
-	ID     string `json:"id"`
-	Secret string `json:"secret"`
-}
-
 type IdentityManager struct {
 	IdentitiesMap *IndentitiesMap
 }
@@ -36,25 +31,10 @@ func (i *IdentityManager) generateSecret() string {
 	return hex.EncodeToString(bytes)
 }
 
-func (i *IdentityManager) RegisterIdentity() Identity {
+func (i *IdentityManager) RegisterIdentity() *Identity {
 	id := i.generateID()
 	secret := i.generateSecret()
-	identity := Identity{
-		ID:     id,
-		Secret: secret,
-	}
+	identity := NewIdentity(id, secret)
 	i.IdentitiesMap.AddIdentity(identity)
 	return identity
-}
-
-func (i *IdentityManager) ValidateIdentity(identity Identity) (bool, error) {
-	mappedIdentity, err := i.IdentitiesMap.GetIdentity(identity.ID)
-	if err != nil {
-		return false, err
-	}
-	if mappedIdentity.Secret != identity.Secret {
-		return false, ErrSpoofedIdentity
-	}
-
-	return true, nil
 }
