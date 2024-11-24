@@ -8,25 +8,29 @@ import (
 	"time"
 
 	"github.com/Monkhai/strixos-server.git/internal/game"
+	"github.com/Monkhai/strixos-server.git/internal/identity"
 	"github.com/Monkhai/strixos-server.git/pkg/shared"
 	"github.com/gorilla/websocket"
 )
 
 type Server struct {
-	Queue *PlayerQueue
-	Mux   *sync.RWMutex
-	Ctx   *context.Context
-	Wg    *sync.WaitGroup
+	Queue           *PlayerQueue
+	Mux             *sync.RWMutex
+	Ctx             *context.Context
+	Wg              *sync.WaitGroup
+	IdentityManager *identity.IdentityManager
 }
 
 func NewServer(ctx *context.Context, wg *sync.WaitGroup) *Server {
 	q := NewPlayerQueue()
 	mux := &sync.RWMutex{}
+	im := identity.NewIdentityManager()
 	return &Server{
-		Queue: q,
-		Mux:   mux,
-		Ctx:   ctx,
-		Wg:    wg,
+		Queue:           q,
+		Mux:             mux,
+		Ctx:             ctx,
+		Wg:              wg,
+		IdentityManager: im,
 	}
 }
 
@@ -36,16 +40,24 @@ func (s *Server) WsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("error creating the ws connection: %s", err)
 	}
+	s.AddPlayer(conn, s.Wg)
 
-	player := game.NewPlayer(conn, *s.Ctx)
-	s.AddPlayer(player, s.Wg)
 }
 
-func (s *Server) AddPlayer(p *game.Player, wg *sync.WaitGroup) {
+func (s *Server) AddPlayer(conn *websocket.Conn, wg *sync.WaitGroup) {
+	identity := s.IdentityManager.RegisterIdentity()
+	p := game.NewPlayer(identity.ID, conn, *s.Ctx)
 	log.Printf("New connection with player %s\n", p.ID)
-	wg.Add(1)
+
+	i, err := s.IdentityManager.IdentitiesMap.GetIdentity(p.ID)
+	if err != nil {
+		log.Printf("Error getting identity: %s\n", err)
+	}
+	log.Printf("Identity: %v\n", i)
+
+	wg.Add(2)
 	go s.ListenToPlayerMessages(p, wg)
-	go p.Listen()
+	go p.Listen(wg)
 }
 
 func (s *Server) HandleRequestGame(p *game.Player) {
@@ -83,9 +95,10 @@ func (s *Server) QueueLoop(ctx context.Context, wg *sync.WaitGroup) {
 			if !hasPlayers {
 				log.Println("Not enough players to start a game. Waiting...")
 			} else {
-				game := game.NewGame(players)
-				go game.GameLoop()
-				wg.Add(1)
+				log.Println("Starting a game between", players[0].ID, "and", players[1].ID)
+				game := game.NewGame(players, ctx)
+				wg.Add(2)
+				go game.GameLoop(wg)
 				go s.ListenToGameMessages(game, wg)
 			}
 			time.Sleep(5 * time.Second)
@@ -93,7 +106,6 @@ func (s *Server) QueueLoop(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-// listen to messages so we can shut down games when needed or in the future do more stuff
 func (s *Server) ListenToGameMessages(g *game.Game, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {

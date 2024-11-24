@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/Monkhai/strixos-server.git/pkg/shared"
 )
@@ -17,9 +18,8 @@ type Game struct {
 	Cancel  context.CancelFunc
 }
 
-func NewGame(players [2]*Player) *Game {
-	ctx, cancel := context.WithCancel(context.Background())
-	//toggle isInGame for players
+func NewGame(players [2]*Player, parentCtx context.Context) *Game {
+	ctx, cancel := context.WithCancel(parentCtx)
 	players[0].SetIsInGame(true)
 	players[1].SetIsInGame(true)
 	return &Game{
@@ -32,9 +32,10 @@ func NewGame(players [2]*Player) *Game {
 	}
 }
 
-func (g *Game) GameLoop() {
-	defer g.Cancel()
+func (g *Game) GameLoop(wg *sync.WaitGroup) {
 	defer func() {
+		wg.Done()
+		g.Cancel()
 		g.Player1.SetIsInGame(false)
 		g.Player2.SetIsInGame(false)
 	}()
@@ -52,6 +53,12 @@ func (g *Game) GameLoop() {
 
 	for {
 		select {
+		case <-g.Ctx.Done():
+			{
+				log.Printf("Game between %s and %s ended\n", g.Player1.ID, g.Player2.ID)
+				return
+			}
+
 		case msg := <-currentPlayer.GameMessageChan:
 			switch m := msg.(type) {
 			case DisconnectedMessage:

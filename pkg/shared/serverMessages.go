@@ -1,23 +1,40 @@
 package shared
 
+import "github.com/Monkhai/strixos-server.git/internal/identity"
+
 const (
-	StartGameMessageType   MessageType = "startGame"
-	UpdateGameMessageType  MessageType = "update"
-	GameOverMessageType    MessageType = "gameOver"
-	GameClosedMessageType  MessageType = "gameClosed"
-	ErrorMessageType       MessageType = "error"
-	GameWaitingMessageType MessageType = "gameWaiting"
-	RemovedFromQueueType   MessageType = "removedFromQueue"
-	RemovedFromGameType    MessageType = "removedFromGame"
-	OpponentDisconnected   MessageType = "opponentDisconnected"
+	StartGameMessageType              MessageType = "startGame"
+	UpdateGameMessageType             MessageType = "update"
+	GameOverMessageType               MessageType = "gameOver"
+	GameClosedMessageType             MessageType = "gameClosed"
+	ErrorMessageType                  MessageType = "error"
+	GameWaitingMessageType            MessageType = "gameWaiting"
+	RemovedFromQueueMessageType       MessageType = "removedFromQueue"
+	RemovedFromGameMessageType        MessageType = "removedFromGame"
+	OpponentDisconnectedMessageType   MessageType = "opponentDisconnected"
+	RegisteredMessageType             MessageType = "registered"
+	DisconnectedFromServerMessageType MessageType = "disconnectedFromServer"
 )
 
+var DisconnectedFromServerMessage = GenericMessage{
+	Type: DisconnectedFromServerMessageType,
+}
+
 var OpponentDisconnectedMessage = GenericMessage{
-	Type: OpponentDisconnected,
+	Type: OpponentDisconnectedMessageType,
 }
 
 var RemovedFromQueueMessage = GenericMessage{
-	Type: RemovedFromQueueType,
+	Type: RemovedFromQueueMessageType,
+}
+
+func RegistedMesage(identity identity.Identity) GenericMessage {
+	return GenericMessage{
+		Type: RegisteredMessageType,
+		Content: map[string]any{
+			"identity": identity,
+		},
+	}
 }
 
 func ErrorMessage(message string) GenericMessage {
@@ -43,6 +60,6 @@ func GameClosedMessage() GenericMessage {
 
 func RemovedFromGameMessage() GenericMessage {
 	return GenericMessage{
-		Type: RemovedFromGameType,
+		Type: RemovedFromGameMessageType,
 	}
 }

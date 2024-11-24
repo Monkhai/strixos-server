@@ -24,8 +24,7 @@ type Player struct {
 	Mux               *sync.RWMutex
 }
 
-func NewPlayer(conn *websocket.Conn, ctx context.Context) *Player {
-	id := GenerateUniqueID()
+func NewPlayer(id string, conn *websocket.Conn, ctx context.Context) *Player {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Player{
 		ID:                id,
@@ -39,87 +38,120 @@ func NewPlayer(conn *websocket.Conn, ctx context.Context) *Player {
 	}
 }
 
-func (p *Player) Listen() {
-	defer close(p.GameMessageChan)
+func (p *Player) Listen(wg *sync.WaitGroup) {
+	defer func() {
+		wg.Done()
+		close(p.GameMessageChan)
+		close(p.ServerMessageChan)
+		log.Printf("Player %s listener done\n", p.ID)
+	}()
+
+	messageChan := make(chan []byte)
+	errorChan := make(chan error)
+
+	go func() {
+		for {
+			_, msg, err := p.Conn.ReadMessage()
+			if err != nil {
+				errorChan <- err
+				return
+			}
+			messageChan <- msg
+		}
+	}()
 
 	for {
-		_, msg, err := p.Conn.ReadMessage()
-		if err != nil {
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("Player %s disconnected gracefully\n", p.ID)
-			} else {
-				log.Printf("Unexpected error reading from player %s: %v\n", p.ID, err)
-			}
-
-			if p.IsInGame {
-				p.GameMessageChan <- DisconnectedMessage{Player: p}
-			} else {
-				p.ServerMessageChan <- DisconnectedMessage{Player: p}
-			}
-			return
-		}
-
-		var baseMsg shared.BaseMessage
-		if err := json.Unmarshal(msg, &baseMsg); err != nil {
-			log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
-			continue
-		}
-		log.Println(p.ID, baseMsg.Type)
-
-		switch baseMsg.Type {
-		case shared.MoveMessageType:
+		select {
+		case <-p.Ctx.Done():
 			{
-				var moveMsg shared.MoveMessage
-				if err := json.Unmarshal(msg, &moveMsg); err != nil {
+				log.Printf("Player %s context done\n", p.ID)
+				p.WriteMessage(shared.DisconnectedFromServerMessage)
+				return
+			}
+		case msg := <-messageChan:
+			{
+
+				var baseMsg shared.BaseMessage
+				if err := json.Unmarshal(msg, &baseMsg); err != nil {
 					log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
 					continue
 				}
-				p.GameMessageChan <- moveMsg
-			}
+				log.Println(p.ID, baseMsg.Type)
 
-		case shared.CloseMessageType:
-			{
-				var closeMsg shared.CloseMessage
-				if err := json.Unmarshal(msg, &closeMsg); err != nil {
-					log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
-					continue
+				switch baseMsg.Type {
+				case shared.MoveMessageType:
+					{
+						var moveMsg shared.MoveMessage
+						if err := json.Unmarshal(msg, &moveMsg); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+							continue
+						}
+						p.GameMessageChan <- moveMsg
+					}
+
+				case shared.CloseMessageType:
+					{
+						var closeMsg shared.CloseMessage
+						if err := json.Unmarshal(msg, &closeMsg); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+							continue
+						}
+						closeGameMessage := shared.CloseMessage{
+							BaseMessage: shared.BaseMessage{Type: "gameClosed"},
+							Reason:      closeMsg.Reason,
+						}
+						p.GameMessageChan <- closeGameMessage
+					}
+
+				case shared.RequestGameMessageType:
+					{
+						log.Printf("Player %s requested a game\n", p.ID)
+						p.ServerMessageChan <- shared.RequestGameMessage
+					}
+
+				case shared.LeaveGameMessageType:
+					{
+						var leaveGameMessage shared.BaseMessage
+						if err := json.Unmarshal(msg, &leaveGameMessage); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+							continue
+						}
+						p.GameMessageChan <- leaveGameMessage
+					}
+
+				case shared.LeaveQueueMessageType:
+					var leaveQueueMessage shared.BaseMessage
+					if err := json.Unmarshal(msg, &leaveQueueMessage); err != nil {
+						log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
+						continue
+					}
+					{
+						p.ServerMessageChan <- leaveQueueMessage
+					}
+
+				default:
+					log.Printf("Unknown message type: %s\n", baseMsg.Type)
+					p.GameMessageChan <- shared.UnknownMessage
 				}
-				closeGameMessage := shared.CloseMessage{
-					BaseMessage: shared.BaseMessage{Type: "gameClosed"},
-					Reason:      closeMsg.Reason,
+
+			}
+		case err := <-errorChan:
+			{
+				if err != nil {
+					if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+						log.Printf("Player %s disconnected gracefully\n", p.ID)
+					} else {
+						log.Printf("Unexpected error reading from player %s: %v\n", p.ID, err)
+					}
+
+					if p.IsInGame {
+						p.GameMessageChan <- DisconnectedMessage{Player: p}
+					} else {
+						p.ServerMessageChan <- DisconnectedMessage{Player: p}
+					}
+					return
 				}
-				p.GameMessageChan <- closeGameMessage
 			}
-
-		case shared.RequestGameMessageType:
-			{
-				log.Printf("Player %s requested a game\n", p.ID)
-				p.ServerMessageChan <- shared.RequestGameMessage
-			}
-
-		case shared.LeaveGameMessageType:
-			{
-				var leaveGameMessage shared.BaseMessage
-				if err := json.Unmarshal(msg, &leaveGameMessage); err != nil {
-					log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
-					continue
-				}
-				p.GameMessageChan <- leaveGameMessage
-			}
-
-		case shared.LeaveQueueMessageType:
-			var leaveQueueMessage shared.BaseMessage
-			if err := json.Unmarshal(msg, &leaveQueueMessage); err != nil {
-				log.Printf("Invalid JSON message from player %s: %v\n", p.ID, err)
-				continue
-			}
-			{
-				p.ServerMessageChan <- leaveQueueMessage
-			}
-
-		default:
-			log.Printf("Unknown message type: %s\n", baseMsg.Type)
-			p.GameMessageChan <- shared.UnknownMessage
 		}
 	}
 }
