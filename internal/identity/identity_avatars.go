@@ -10,6 +10,7 @@ const (
 	AVATAR_ROBBER      = "robber"
 	AVATAR_SCIENTIST   = "scientist"
 	AVATAR_SOLIDER     = "solider"
+	AVATAR_COMEDIAN    = "comedian"
 	AVATAR_DEFAULT     = "default"
 	AVATAR_UNKNOWN     = "unknown"
 )

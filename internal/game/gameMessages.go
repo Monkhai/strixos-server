@@ -12,6 +12,7 @@ func (g *Game) NewGameMessage(mark string, activePlayer, opponent *Player) share
 			"mark":         mark,
 			"activePlayer": activePlayer.Identity.GetSafeIdentity(),
 			"opponent":     opponent.Identity.GetSafeIdentity(),
+			"gameID":       g.ID,
 		},
 	}
 }

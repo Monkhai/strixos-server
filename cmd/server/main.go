@@ -23,7 +23,7 @@ func main() {
 
 	wg.Add(1)
 	go s.QueueLoop(ctx, &wg)
-	http.HandleFunc("/ws", s.WsHandler)
+	http.HandleFunc("/ws", s.WebSocketHandler)
 
 	go func() {
 		fmt.Println("Server started on :8080")

@@ -3,18 +3,31 @@ package shared
 import "github.com/Monkhai/strixos-server.git/internal/identity"
 
 const (
-	MoveMessageType        MessageType = "move"
-	CloseMessageType       MessageType = "close"          // why do we have this>???
-	RequestGameMessageType MessageType = "gameRequest"    // base message type
-	LeaveGameMessageType   MessageType = "leaveGame"      // base message type
-	LeaveQueueMessageType  MessageType = "leaveQueue"     // base message type
-	UnknownMessageType     MessageType = "unknownMessage" // unknown
-	UpdateIdentityType     MessageType = "updateIdentity" // unknown
+	MoveMessageType             MessageType = "move"
+	CloseMessageType            MessageType = "close"
+	RequestGameMessageType      MessageType = "gameRequest"
+	LeaveGameMessageType        MessageType = "leaveGame"
+	LeaveQueueMessageType       MessageType = "leaveQueue"
+	IdentityUpdateMessageType   MessageType = "updateIdentity"
+	JoinInviteGameMessageType   MessageType = "joinInviteGame"
+	CreateInviteGameMessageType MessageType = "createInviteGame"
+	LeaveInviteGameMessageType  MessageType = "leaveInviteGame"
+	UnknownMessageType          MessageType = "unknownMessage"
 )
 
 type BaseClientMessage struct {
 	Type     MessageType       `json:"type"`
 	Identity identity.Identity `json:"identity"`
+}
+
+type JoinInviteGameMessage struct {
+	BaseClientMessage
+	GameID string `json:"gameID"`
+}
+
+type LeaveInviteGameMessage struct {
+	BaseClientMessage
+	GameID string `json:"gameID"`
 }
 
 type MoveMessage struct {

@@ -15,34 +15,32 @@ import (
 )
 
 type Server struct {
-	Queue           *PlayerQueue
-	Mux             *sync.RWMutex
-	Ctx             *context.Context
-	Wg              *sync.WaitGroup
-	IdentityManager *identity.IdentityManager
+	Queue             *PlayerQueue
+	Mux               *sync.RWMutex
+	Ctx               *context.Context
+	Wg                *sync.WaitGroup
+	IdentityManager   *identity.IdentityManager
+	InviteGameManager *game.InviteGameManager
 }
 
 func NewServer(ctx *context.Context, wg *sync.WaitGroup) *Server {
-	q := NewPlayerQueue()
-	mux := &sync.RWMutex{}
-	im := identity.NewIdentityManager()
 	return &Server{
-		Queue:           q,
-		Mux:             mux,
-		Ctx:             ctx,
-		Wg:              wg,
-		IdentityManager: im,
+		Ctx:               ctx,
+		Wg:                wg,
+		Queue:             NewPlayerQueue(),
+		Mux:               &sync.RWMutex{},
+		IdentityManager:   identity.NewIdentityManager(),
+		InviteGameManager: game.NewInviteGameManager(),
 	}
 }
 
-func (s *Server) WsHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("error creating the ws connection: %s", err)
 	}
 	s.AddPlayer(conn, s.Wg)
-
 }
 
 func (s *Server) AddPlayer(conn *websocket.Conn, wg *sync.WaitGroup) {
@@ -56,9 +54,14 @@ func (s *Server) AddPlayer(conn *websocket.Conn, wg *sync.WaitGroup) {
 	}))
 	log.Println("Identity sent to player", p.Identity.ID)
 
-	//read one message from the connection
+	//read auth message
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
+		//error is 1000
+		if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+			log.Println("Connection disconnected before finished auth")
+			return
+		}
 		log.Printf("error reading message from player %s: %s", p.Identity.ID, err)
 		return
 	}
@@ -69,7 +72,7 @@ func (s *Server) AddPlayer(conn *websocket.Conn, wg *sync.WaitGroup) {
 		return
 	}
 
-	if m.Type != shared.UpdateIdentityType {
+	if m.Type != shared.IdentityUpdateMessageType {
 		log.Printf("Player %s sent an unkown message type: %s\n", p.Identity.ID, m.Type)
 		return
 	}
@@ -197,6 +200,32 @@ func (s *Server) ListenToPlayerMessages(p *game.Player, wg *sync.WaitGroup) {
 						}
 					}
 
+				case shared.JoinInviteGameMessage:
+					{
+						log.Printf("Player %s asked to join a game with id %s\n", p.Identity.ID, msg.(shared.JoinInviteGameMessage).GameID)
+						typedMsg, valid := msg.(shared.JoinInviteGameMessage)
+						if !valid {
+							log.Printf("Player %s sent a message of type %s but it is not a JoinInviteGameMessage\n", p.Identity.ID, m.Type)
+						}
+						game, found := s.InviteGameManager.GetGame(typedMsg.GameID)
+						if !found {
+							log.Printf("Player %s asked to join a game with id %s but the game was not found\n", p.Identity.ID, typedMsg.GameID)
+						}
+
+						game.AddSecondPlayer(p)
+						wg.Add(2)
+						go game.GameLoop(wg)
+						go s.ListenToGameMessages(game, wg)
+					}
+				case shared.LeaveInviteGameMessage:
+					{
+						log.Printf("Player %s asked to leave a game with id %s\n", p.Identity.ID, msg.(shared.LeaveInviteGameMessage).GameID)
+						typedMsg, valid := msg.(shared.LeaveInviteGameMessage)
+						if !valid {
+							log.Printf("Player %s sent a message of type %s but it is not a LeaveInviteGameMessage\n", p.Identity.ID, m.Type)
+						}
+						s.InviteGameManager.RemoveGame(typedMsg.GameID)
+					}
 				case shared.BaseClientMessage:
 					{
 						log.Printf("Player %s sent a message of type %s\n", p.Identity.ID, m.Type)
@@ -212,6 +241,13 @@ func (s *Server) ListenToPlayerMessages(p *game.Player, wg *sync.WaitGroup) {
 						case shared.RequestGameMessageType:
 							{
 								s.HandleRequestGame(p)
+							}
+						case shared.CreateInviteGameMessageType:
+							{
+								game := game.NewInviteGame(p, *s.Ctx)
+								s.InviteGameManager.AddGame(game)
+								log.Printf("Player %s created a game with id %s\n", p.Identity.ID, game.ID)
+								p.WriteMessage(shared.InviteGameCreatedMessage(game.ID))
 							}
 						}
 					}

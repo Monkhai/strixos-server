@@ -124,7 +124,7 @@ func (p *Player) Listen(wg *sync.WaitGroup, validateIdentity func(*identity.Iden
 
 				case shared.LeaveGameMessageType:
 					{
-						var leaveGameMessage shared.BaseMessage
+						var leaveGameMessage shared.BaseClientMessage
 						if err := json.Unmarshal(msg, &leaveGameMessage); err != nil {
 							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
 							continue
@@ -133,13 +133,40 @@ func (p *Player) Listen(wg *sync.WaitGroup, validateIdentity func(*identity.Iden
 					}
 
 				case shared.LeaveQueueMessageType:
-					var leaveQueueMessage shared.BaseMessage
-					if err := json.Unmarshal(msg, &leaveQueueMessage); err != nil {
-						log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
-						continue
-					}
 					{
+						var leaveQueueMessage shared.BaseClientMessage
+						if err := json.Unmarshal(msg, &leaveQueueMessage); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
+							continue
+						}
 						p.ServerMessageChan <- leaveQueueMessage
+					}
+				case shared.JoinInviteGameMessageType:
+					{
+						var joinInviteGameMessage shared.JoinInviteGameMessage
+						if err := json.Unmarshal(msg, &joinInviteGameMessage); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
+							continue
+						}
+						p.ServerMessageChan <- joinInviteGameMessage
+					}
+				case shared.CreateInviteGameMessageType:
+					{
+						var createInviteGameMessage shared.BaseClientMessage
+						if err := json.Unmarshal(msg, &createInviteGameMessage); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
+							continue
+						}
+						p.ServerMessageChan <- createInviteGameMessage
+					}
+				case shared.LeaveInviteGameMessageType:
+					{
+						var leaveInviteGameMessage shared.LeaveInviteGameMessage
+						if err := json.Unmarshal(msg, &leaveInviteGameMessage); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
+							continue
+						}
+						p.ServerMessageChan <- leaveInviteGameMessage
 					}
 
 				default:

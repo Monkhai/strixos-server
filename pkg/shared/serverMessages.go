@@ -14,8 +14,10 @@ const (
 	OpponentDisconnectedMessageType   MessageType = "opponentDisconnected"
 	DisconnectedFromServerMessageType MessageType = "disconnectedFromServer"
 	//register flow
-	InitialIdentityMessageType MessageType = "initialIdentity"
-	RegisteredMessageType      MessageType = "registered"
+	AuthIdentityMessageType MessageType = "authIdentity"
+	RegisteredMessageType   MessageType = "registered"
+	//invite game flow
+	InviteGameCreatedMessageType MessageType = "inviteGameCreated"
 )
 
 var DisconnectedFromServerMessage = GenericMessage{
@@ -32,9 +34,18 @@ var RemovedFromQueueMessage = GenericMessage{
 
 func InitialIdentityMessage(identity identity.InitialIdentity) GenericMessage {
 	return GenericMessage{
-		Type: InitialIdentityMessageType,
+		Type: AuthIdentityMessageType,
 		Content: map[string]any{
 			"identity": identity,
+		},
+	}
+}
+
+func InviteGameCreatedMessage(gameID string) GenericMessage {
+	return GenericMessage{
+		Type: InviteGameCreatedMessageType,
+		Content: map[string]any{
+			"gameID": gameID,
 		},
 	}
 }
