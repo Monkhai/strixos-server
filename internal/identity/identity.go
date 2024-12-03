@@ -36,7 +36,8 @@ func NewInitialIdentity(id, secret string) *InitialIdentity {
 
 func (i *Identity) GetSafeIdentity() *SafeIdentity {
 	return &SafeIdentity{
-		ID:     i.ID,
-		Avatar: i.Avatar,
+		ID:          i.ID,
+		Avatar:      i.Avatar,
+		DisplayName: i.DisplayName,
 	}
 }
