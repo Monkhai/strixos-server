@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log"
 	"sync"
 
 	"github.com/Monkhai/strixos-server.git/internal/game"
@@ -112,14 +111,5 @@ func NewPlayerQueue() *PlayerQueue {
 		Tail: nil,
 		Map:  make(map[string]*PlayerNode),
 		Mux:  &sync.RWMutex{},
-	}
-}
-
-func (q *PlayerQueue) printQueue() {
-	q.Mux.RLock()
-	defer q.Mux.RUnlock()
-
-	for node := q.Head; node != nil; node = node.Next {
-		log.Println(node.Player.Identity.ID)
 	}
 }
