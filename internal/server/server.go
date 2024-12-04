@@ -123,10 +123,10 @@ func (s *Server) QueueLoop(ctx context.Context, wg *sync.WaitGroup) {
 			log.Println("QUEUE LOOP DONE")
 			return
 		default:
-			s.Queue.printQueue()
+			// s.Queue.printQueue()
 			players, hasPlayers := s.Queue.GetTwoPlayers()
 			if !hasPlayers {
-				log.Println("Not enough players to start a game. Waiting...")
+				// log.Println("Not enough players to start a game. Waiting...")
 			} else {
 				log.Println("Starting a game between", players[0].Identity.ID, "and", players[1].Identity.ID)
 				game := game.NewGame(players, ctx)
@@ -166,6 +166,16 @@ func (s *Server) ListenToGameMessages(g *game.Game, wg *sync.WaitGroup) {
 							otherPlayer = g.Player1
 						}
 						s.HandleLeaveGameRequest(m.Player, otherPlayer)
+					}
+				case game.InviteGameLoopOverMessage:
+					{
+						log.Printf("Invite Game between %s and %s ended\n", g.Player1.Identity.ID, g.Player2.Identity.ID)
+						s.InviteGameManager.RemoveGame(m.GameID)
+						g := game.NewEmptyInviteGame(*s.Ctx)
+						s.InviteGameManager.AddGame(g)
+						for _, p := range m.Players {
+							p.WriteMessage(game.InviteGameOverMessage(m.Board, m.Winner, g.ID))
+						}
 					}
 				}
 			}
@@ -212,10 +222,19 @@ func (s *Server) ListenToPlayerMessages(p *game.Player, wg *sync.WaitGroup) {
 							log.Printf("Player %s asked to join a game with id %s but the game was not found\n", p.Identity.ID, typedMsg.GameID)
 						}
 
-						game.AddSecondPlayer(p)
-						wg.Add(2)
-						go game.GameLoop(wg)
-						go s.ListenToGameMessages(game, wg)
+						if game.Player1 != nil && game.Player2 != nil {
+							log.Printf("Player %s asked to join a game with id %s but the game is full\n", p.Identity.ID, typedMsg.GameID)
+							return
+						}
+
+						if game.Player1 != nil {
+							game.AddSecondPlayer(p)
+							wg.Add(2)
+							go game.InviteGameLoop(wg)
+							go s.ListenToGameMessages(game, wg)
+						} else {
+							game.AddFirstPlayer(p)
+						}
 					}
 				case shared.LeaveInviteGameMessage:
 					{

@@ -6,6 +6,7 @@ const (
 	StartGameMessageType              MessageType = "startGame"
 	UpdateGameMessageType             MessageType = "update"
 	GameOverMessageType               MessageType = "gameOver"
+	InviteGameOverMessageType         MessageType = "inviteGameOver"
 	GameClosedMessageType             MessageType = "gameClosed"
 	ErrorMessageType                  MessageType = "error"
 	GameWaitingMessageType            MessageType = "gameWaiting"

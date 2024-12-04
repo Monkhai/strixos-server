@@ -26,12 +26,24 @@ func (g *Game) GameUpdateMessage(activePlayer *Player) shared.GenericMessage {
 		},
 	}
 }
+
 func GameOverMessage(board *Board, winner *Player) *shared.GenericMessage {
 	return &shared.GenericMessage{
 		Type: shared.GameOverMessageType,
 		Content: map[string]any{
 			"board":  board.Cells,
 			"winner": winner.Identity.GetSafeIdentity(),
+		},
+	}
+}
+
+func InviteGameOverMessage(board *Board, winner *Player, newGameID string) *shared.GenericMessage {
+	return &shared.GenericMessage{
+		Type: shared.InviteGameOverMessageType,
+		Content: map[string]any{
+			"board":     board.Cells,
+			"winner":    winner.Identity.GetSafeIdentity(),
+			"newGameID": newGameID,
 		},
 	}
 }
