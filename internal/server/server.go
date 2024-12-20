@@ -55,8 +55,10 @@ func (s *Server) AddPlayer(conn *websocket.Conn, wg *sync.WaitGroup) {
 	log.Println("Identity sent to player", p.Identity.ID)
 
 	//read auth message
+	//TODO: wrap in a for loop in case the message is wrong
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
+		defer s.IdentityManager.IdentitiesMap.RemoveIdentity(p.Identity.ID)
 		//error is 1000
 		if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 			log.Println("Connection disconnected before finished auth")
@@ -79,7 +81,7 @@ func (s *Server) AddPlayer(conn *websocket.Conn, wg *sync.WaitGroup) {
 
 	valid := s.IdentityManager.IdentitiesMap.UpdateIdentity(m.Content.Identity)
 	if !valid {
-		log.Printf("Player %s tried to update an identity that does not exist\n", p.Identity.ID)
+		log.Printf("Player %s failed to update during initial auth\n", p.Identity.ID)
 		return
 	}
 
@@ -120,21 +122,24 @@ func (s *Server) QueueLoop(ctx context.Context, wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("QUEUE LOOP DONE")
-			return
-		default:
-			// s.Queue.printQueue()
-			players, hasPlayers := s.Queue.GetTwoPlayers()
-			if !hasPlayers {
-				// log.Println("Not enough players to start a game. Waiting...")
-			} else {
-				log.Println("Starting a game between", players[0].Identity.ID, "and", players[1].Identity.ID)
-				game := game.NewGame(players, ctx)
-				wg.Add(2)
-				go game.GameLoop(wg)
-				go s.ListenToGameMessages(game, wg)
+			{
+				log.Println("QUEUE LOOP DONE")
+				return
 			}
-			time.Sleep(5 * time.Second)
+		default:
+			{
+				players, hasPlayers := s.Queue.GetTwoPlayers()
+				if !hasPlayers {
+					// log.Println("Not enough players to start a game. Waiting...")
+				} else {
+					log.Println("Starting a game between", players[0].Identity.ID, "and", players[1].Identity.ID)
+					game := game.NewGame(players, ctx)
+					wg.Add(2)
+					go game.GameLoop(wg)
+					go s.ListenToGameMessages(game, wg)
+				}
+				time.Sleep(5 * time.Second)
+			}
 		}
 	}
 }
@@ -194,12 +199,12 @@ func (s *Server) ListenToPlayerMessages(p *game.Player, wg *sync.WaitGroup) {
 			}
 		case msg := <-p.ServerMessageChan:
 			{
-
 				switch m := msg.(type) {
 				case game.DisconnectedMessage:
 					{
 						log.Printf("Player %s disconnected\n", p.Identity.ID)
 						s.Queue.RemovePlayer(p)
+						s.IdentityManager.IdentitiesMap.RemoveIdentity(p.Identity.ID)
 					}
 
 				case game.UpdateIdentityMessage:
@@ -207,6 +212,7 @@ func (s *Server) ListenToPlayerMessages(p *game.Player, wg *sync.WaitGroup) {
 						valid := s.IdentityManager.IdentitiesMap.UpdateIdentity(m.Content.Identity)
 						if !valid {
 							log.Printf("Player %s tried to update an identity that does not exist\n", p.Identity.ID)
+							log.Printf("message content: ID: %s Secret:%s\n", m.Content.Identity.ID, m.Content.Identity.Secret)
 						}
 					}
 

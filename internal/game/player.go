@@ -92,6 +92,16 @@ func (p *Player) Listen(wg *sync.WaitGroup, validateIdentity func(*identity.Iden
 				//--------------------------------
 
 				switch baseMsg.Type {
+				case shared.IdentityUpdateMessageType:
+					{
+						var updateMsg UpdateIdentityMessage
+						if err := json.Unmarshal(msg, &updateMsg); err != nil {
+							log.Printf("Invalid JSON message from player %s: %v\n", p.Identity.ID, err)
+							continue
+						}
+						p.ServerMessageChan <- updateMsg
+					}
+
 				case shared.MoveMessageType:
 					{
 						var moveMsg shared.MoveMessage

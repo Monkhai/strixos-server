@@ -163,11 +163,9 @@ func (g *Game) GameLoop(wg *sync.WaitGroup) {
 						{
 							log.Printf("Unknown message type: %s\n", m.Type)
 						}
-
 					}
 				}
 			}
 		}
-
 	}
 }

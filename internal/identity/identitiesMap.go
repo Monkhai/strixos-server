@@ -33,8 +33,6 @@ func (i *IndentitiesMap) AddIdentity(newIdentity *Identity) error {
 }
 
 func (i *IndentitiesMap) ValidateIdentity(identity *Identity) (bool, error) {
-	i.Mux.RLock()
-	defer i.Mux.RUnlock()
 	mappedIdentity, err := i.GetIdentity(identity.ID)
 	if err != nil {
 		return false, err
@@ -47,15 +45,18 @@ func (i *IndentitiesMap) ValidateIdentity(identity *Identity) (bool, error) {
 }
 
 func (i *IndentitiesMap) UpdateIdentity(updatedIdentity Identity) bool {
-	i.Mux.Lock()
+	i.Mux.RLock()
 	identity, ok := i.identities[updatedIdentity.ID]
 	if !ok {
+		log.Printf("Identity %s not found\n", updatedIdentity.ID)
 		return false
 	}
-	i.Mux.Unlock()
+	i.Mux.RUnlock()
 
 	valid, err := i.ValidateIdentity(identity)
 	if !valid || err != nil {
+		//print the error
+		log.Printf("Error validating identity: %s\n", err)
 		return false
 	}
 
@@ -73,6 +74,7 @@ func (i *IndentitiesMap) UpdateIdentity(updatedIdentity Identity) bool {
 }
 
 func (i *IndentitiesMap) RemoveIdentity(id string) {
+	log.Printf("Removing identity %s\n", id)
 	i.Mux.Lock()
 	defer i.Mux.Unlock()
 	delete(i.identities, id)
