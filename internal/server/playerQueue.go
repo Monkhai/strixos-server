@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"sync"
 
 	"github.com/Monkhai/strixos-server.git/internal/game"
@@ -93,6 +94,12 @@ func (q *PlayerQueue) GetTwoPlayers() ([2]*game.Player, bool) {
 
 	playerOne := q.Dequeue()
 	playerTwo := q.Dequeue()
+
+	if playerOne.Identity.ID == playerTwo.Identity.ID {
+		q.Enqueue(playerOne)
+		log.Println("Player tried to play with themselves")
+		return [2]*game.Player{nil, nil}, false
+	}
 
 	return [2]*game.Player{playerOne, playerTwo}, true
 }

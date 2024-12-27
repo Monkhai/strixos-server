@@ -50,11 +50,16 @@ func (g *Game) AddFirstPlayer(p *Player) {
 	p.SetIsInGame(true)
 }
 
-func (g *Game) AddSecondPlayer(p *Player) {
+func (g *Game) AddSecondPlayer(p *Player) bool {
+	if g.Player1.Identity.ID == p.Identity.ID {
+		return false
+	}
+
 	g.Mux.Lock()
 	g.Player2 = p
 	g.Mux.Unlock()
 	p.SetIsInGame(true)
+	return true
 }
 
 func (g *Game) InviteGameLoop(wg *sync.WaitGroup) {

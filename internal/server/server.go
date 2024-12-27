@@ -129,9 +129,7 @@ func (s *Server) QueueLoop(ctx context.Context, wg *sync.WaitGroup) {
 		default:
 			{
 				players, hasPlayers := s.Queue.GetTwoPlayers()
-				if !hasPlayers {
-					// log.Println("Not enough players to start a game. Waiting...")
-				} else {
+				if hasPlayers {
 					log.Println("Starting a game between", players[0].Identity.ID, "and", players[1].Identity.ID)
 					game := game.NewGame(players, ctx)
 					wg.Add(2)
@@ -234,7 +232,11 @@ func (s *Server) ListenToPlayerMessages(p *game.Player, wg *sync.WaitGroup) {
 						}
 
 						if game.Player1 != nil {
-							game.AddSecondPlayer(p)
+							valid = game.AddSecondPlayer(p)
+							if !valid {
+								log.Printf("Player %s asked to join a game with id %s but he is already in the game\n", p.Identity.ID, typedMsg.GameID)
+								return
+							}
 							wg.Add(2)
 							go game.InviteGameLoop(wg)
 							go s.ListenToGameMessages(game, wg)
