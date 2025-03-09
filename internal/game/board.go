@@ -68,7 +68,7 @@ func (b *Board) CheckWin() bool {
 	defer b.Mux.RUnlock()
 
 	// Check rows and columns
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if b.Cells[i][0].Value != "-" && b.Cells[i][0].Value == b.Cells[i][1].Value && b.Cells[i][1].Value == b.Cells[i][2].Value {
 			b.Cells[i][0].WinState = true
 			b.Cells[i][1].WinState = true
@@ -104,8 +104,8 @@ func (b *Board) CheckDraw() bool {
 	b.Mux.RLock()
 	defer b.Mux.RUnlock()
 
-	for i := 0; i < 3; i++ {
-		for j := 0; j < 3; j++ {
+	for i := range 3 {
+		for j := range 3 {
 			if b.Cells[i][j].Value == "-" {
 				return false
 			}
@@ -118,8 +118,8 @@ func (b *Board) UpdateLives() {
 	b.Mux.Lock()
 	defer b.Mux.Unlock()
 
-	for i := 0; i < 3; i++ {
-		for j := 0; j < 3; j++ {
+	for i := range 3 {
+		for j := range 3 {
 			if b.Cells[i][j].Value == "-" {
 				continue
 			}
